@@ -48,6 +48,7 @@ class Deck:
         for card in self.cards:
             print(card)
     
+#Nostetaan kortteja
     def draw_from_deck(self, amount):
         drawn = []
         for _ in range(amount):

@@ -1,11 +1,3 @@
-# Projektityö korttipeli "Paskahousu"
-# Ryhmä: L. Saarela, S. Vehmaa, T. Linna, I Mynttinen
-# Versio: 1.3.1
-# Päivitetty: 30.10.2024
-# Viimeksi muokannut: Lassi
-
-# Pyydetyt metodeiden kutsumiset koodin lopussa 
-
 import random
 
 SUITS = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
@@ -338,25 +330,4 @@ def main():
     game_menu.start_game()
 
 
-# main()
-
-# Pyydettyjä metodeita:
-deck = Deck()
-card1 = Card('Hearts', 4)
-card2 = Card('Spades', 8)
-print(card1)
-print(card1.GetColor())
-print(card1.GetRank())
-print(card1.GetSuit())
-print('')
-print(Card.__eq__(card1,card2))
-print(Card.__ge__(card1,card2))
-print(Card.__le__(card1,card2))
-print(Card.__lt__(card1,card2))
-print(Card.__gt__(card1,card2))
-print(Card.__ne__(card1,card2))
-print('')
-deck.shuffle()
-print(deck)
-# Seuraava metodi sekoittaa pakan jos ei ole vielä sekoitettu.
-deck.print_deck()
+main()

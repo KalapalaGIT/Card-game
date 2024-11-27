@@ -33,23 +33,7 @@ class Card:
 
 # Palauttaa kortin arvon numerona.
     def get_value(self):
-        if self.rank == '3':
-            return 3
-        elif self.rank == '4':
-            return 4
-        elif self.rank == '5':
-            return 5
-        elif self.rank == '6':
-            return 6
-        elif self.rank == '7':
-            return 7
-        elif self.rank == '8':
-            return 8
-        elif self.rank == '9':
-            return 9
-        elif self.rank == '10':
-            return 10
-        elif self.rank == 'J':
+        if self.rank == 'J':
             return 11
         elif self.rank == 'Q':
             return 12
@@ -162,6 +146,12 @@ class Table:
         else:
             print("No cards on the table.\n")
 
+    def latest_card_value(self):
+        if self.cards:
+            return self.cards[-1].get_value()
+        else:
+            return 0
+
 # Pelaaja luokka
 class Player:
 
@@ -231,11 +221,13 @@ class StartingPlayerSelector:
             return player2, 2
 
 class GameMenu:
-    def __init__(self, player1, player2, table):
+    def __init__(self, player1, player2, table, deck):
         self.player1 = player1
         self.player2 = player2
         self.table = table
+        self.deck = deck
         self.turn = None
+        self.card_placed = False
 
     def display_turn_menu(self, player):
         print(f"\n{player.name}'s turn.\nWhat do you want to do next?\n[1] Show my deck\n[2] Place card(s)\n[3] Draw a card\n[4] Show the table\n[5] End turn\n")
@@ -251,13 +243,14 @@ class GameMenu:
                 self.place_cards(player)
             # Nosta kortti
             elif action == '3':
-                print("Draw card logic here")
+                self.draw_cards(player)
             # Näytä pöydän ylin kortti
             elif action == '4':
                 self.table.Print_card()
             # Lopeta vuoro
             elif action == '5':
-                self.toggle_turn()
+                self.toggle_turn(player)
+                self.placed_cards = False
         # Vikatilanteiden selvittämistä varten
         except Exception as e:
             print(f"ERROR: An error has occurred. {e}")
@@ -268,15 +261,24 @@ class GameMenu:
         try:
             card_indices = [int(x.strip()) -1 for x in card_input.split(",")]
             
+            # Onko oikeat indexit annettu
             if all(0 <= index < len(player.hand) for index in card_indices):
                 card_values = [player.hand[index].get_value() for index in card_indices]
-                    
+
+                # onko korttien arvot samat     
                 if len(set(card_values)) == 1:
-                    player.Place_cards(self.table, [index for index in card_indices])
-           
-                    for index in card_indices:
-                        card = player.hand[index]
-                    
+
+                    # Laitettavian korttien ja pöydän korttien vertailu
+                    if not self.table.cards or card_values[0] >= self.table.latest_card_value():
+                        player.Place_cards(self.table, [index for index in card_indices])
+                        self.card_placed = True
+   
+                        for index in card_indices:
+                            card = player.hand[index]
+                    else:
+                        print("\nERROR: Selected cards must be higher or equal to the card on the table.\n")
+    
+
                 else:
                     print("\nERROR: All selected cards must have the same value.\n")
             else:
@@ -284,15 +286,50 @@ class GameMenu:
         except ValueError:
             print("\nERROR: Wrong format. Input only number(s) separated by a comma. (e.g. 4,9,1)\n")
 
-    def toggle_turn(self):
+    def draw_cards(self, player):
+
+        if self.deck.cards:
+            while len(player.hand) < 5 and self.deck.cards:
+                player.draw(self.deck, 1)
+            print(f"{player.name} drew cards from deck")
+        else:
+            print(f"{player.name} Drawing the entire table!")
+            self.handle_no_placement(player)
+
+    def check_no_placement(self, player):
+        """Check if the player can place at least one card."""
+        if self.card_placed:
+            return False # Player has least one card placed
+        elif not self.table.cards:
+            return False  # If the table is empty, any card can be placed.
+
+        top_card_value = self.table.cards[-1].get_value()
+        for card in player.hand:
+            if card.get_value() >= top_card_value:
+                return False  # Player has at least one valid card to place.
+        return True  # No valid card to place.
+
+    def handle_no_placement(self, player):
+        """If the player cannot place any cards, they draw the table."""
+        print(f"{player.name} cannot place any cards and will draw the table!")
+        player.hand.extend(self.table.cards)
+        self.table.cards = []  # Clear the table after drawing.
+    
+    def toggle_turn(self, player):
+        if self.check_no_placement(player):
+            self.handle_no_placement(player)
         self.turn = 2 if self.turn == 1 else 1
+        self.card_placed = False
+        print(self.card_placed)
 
     def start_game(self):
         starter, turn = StartingPlayerSelector.decide_starting_turn(self.player1, self.player2)
         #print(f"Player {starter.name} has the smallest card and will go first.")
         self.turn = turn
+
         while True:
             current_player = self.player1 if self.turn == 1 else self.player2
+            
             action = self.display_turn_menu(current_player)
             self.handle_action(action, current_player)
 
@@ -325,7 +362,7 @@ def main():
     starting_player, turn = StartingPlayerSelector.decide_starting_turn(player1, player2)
     print(f"Player {starting_player.name} has the smallest card and will go first.")
 
-    game_menu = GameMenu(player1, player2, table)
+    game_menu = GameMenu(player1, player2, table, deck)
     game_menu.turn = turn
     game_menu.start_game()
 

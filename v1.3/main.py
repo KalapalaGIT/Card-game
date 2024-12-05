@@ -1,4 +1,5 @@
 import random
+from abc import ABCMeta
 
 SUITS = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
@@ -145,7 +146,7 @@ class Table:
 
         else:
             print("No cards on the table.\n")
-
+    
     def latest_card_value(self):
         if self.cards:
             return self.cards[-1].get_value()
@@ -153,11 +154,14 @@ class Table:
             return 0
 
 # Pelaaja luokka
-class Player:
+class Player(metaclass=ABCMeta):
 
     def __init__(self, Name):
         self.name = Name
         self.hand =[]
+
+    def GetName(self):
+        return self.name
 
 # Nostaa pakasta kortteja halutun määrän
     def draw(self,deck: object, amount: int):
@@ -167,11 +171,13 @@ class Player:
         else:
             print(f'No cards Left to draw')
 
+
 # Tulostaa pelaajan kädessä olevat kortit
     def Show_hand(self):
         print(f'\n{self.name}s cards:')
         for idx, card in enumerate(self.hand):
             print(f'{idx +1}: [{card.__str__()}]')
+
 
 # Laittaa pöydälle indexillä valitut kortit
     def Place_cards(self,table: object, cards: int):
@@ -186,51 +192,214 @@ class Player:
                 print(f"Invalid index: {index + 1}")
         table.cards.extend(selected_cards)
 
+# Teksi- ja AI pelaajaluokat
+class TextPlayer(Player):
+    def __init__(self, name):
+        super().__init__(name)
+
+class AI_Player(Player):
+    def __init__(self, name):
+        super().__init__(name)
+
+
+
+# Pelitilanne pelin tilanteen arviointia varten
+class Status:
+    def __init__(self):
+        self.current_turn = 0
+        self.history = []
+        self.players = []
+
+    # Kutsuu pelin aloittajan arvontaa
+    def decide_starting(self):
+        starter = StartingPlayer.starting_player(self.players)
+        self.current_turn = self.players.index(starter)
+
+    # Asetetaan pelin asetukset (Pelaajien lukumäärä, ja pelaajien nimet.)
+    def setup_game(self, deck, test_mode=True):  
+        # Ohittaa pelin asetuksien asettelun
+        if test_mode:
+            print("Test mode activated. Deactivate flag in Status.setup_game().")
+            self.players.append(Player("Sini"))
+            self.players.append(Player("Lassi"))
+            for player in self.players:
+                player.draw(deck, 5)
+            return
+        
+        # Pelin asetuksien asettelu
+        while True:
+            try:
+                num_players = int(input("Enter the number of players (2-10): "))
+                if 2 <= num_players <= 10:
+                    break
+                else:
+                    print("Please enter a number between 2 and 10.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+                
+        for i in range(num_players):
+            name = input(f"Enter name for player {i + 1}: ").strip()
+            player = Player(name)
+            player.draw(deck, 5)
+            self.players.append(player)
+        print("\nPlayers are ready")
+
+    # Aihio korttien pelaamista varten
+    def place_cards(self, player):
+        card_input = input("Input the card numbers you want to place (e.g. '2,3' or '1')\nCards: ")
+        
+        try:
+            card_indices = [int(x.strip()) -1 for x in card_input.split(",")]
+            
+            if all(0 <= index < len(player.hand) for index in card_indices):
+                card_values = [player.hand[index].get_value() for index in card_indices]
+                    
+                if len(set(card_values)) == 1:
+                    player.Place_cards(self.table, [index for index in card_indices])
+           
+                    for index in card_indices:
+                        card = player.hand[index]
+                    
+                else:
+                    print("\nERROR: All selected cards must have the same value.\n")
+            else:
+                print("\nERROR: Invalid card index(es) provided.\n")
+        except ValueError:
+            print("\nERROR: Wrong format. Input only number(s) separated by a comma. (e.g. 4,9,1)\n")
+            
+    def get_current_player(self):
+        return self.players[self.current_turn]
+    
+    # Antaa vuoron seuraavalle pelaajalle
+    def toggle_turn(self):
+        self.current_turn = (self.current_turn + 1) %len(self.players)
+
+class Judge:
+    
+    # Tarkistaa onko pelaajan siirto sääntöjen mukainen
+    @classmethod
+    def validate_move(self, table, played_cards):
+        if not table.cards:  # Tyhjä pöytä
+            return True
+
+        if not played_cards:
+            return False
+        
+        if all(card.GetRank() == played_cards[0].GetRank() for card in played_cards):  # Kaikilla korteilla sama arvo
+        
+            played_value = played_cards[0].get_value()
+            last_value = table.latest_card_value()
+
+            #suurempi tai yhtäsuuri kortti
+            if played_value >= last_value:
+                    return True
+
+            #kortti 2 sääntö
+            if last_value == 15 and played_value == 15:
+                return True
+
+        
+            if played_value == 10 and last_value <= 10:
+                return True
+
+       
+            if played_value == 14 and last_value >= 11:
+                return True
+
+        return False
+
+    # Päivittää pelitilanteen (pakan kaatuminen, korttien nostaminen)
+    @classmethod
+    def update_game_state(self, table, played_cards, status, player):
+        # Kortti 10 kaataa pakan
+        if played_cards[0].get_value() == 10:
+            print("\nThe pile collapses due to a 10! The current player keeps the turn.")
+            table.cards = []  
+            return  # Vuoro ei vaihdu
+
+        # Kortti 14 (ässä) kaataa pakan
+        if played_cards[0].get_value() == 14:
+            print("\nThe pile collapses due to an Ace! The current player keeps the turn.")
+            table.cards = []  
+            return  # Vuoro ei vaihdu
+
+        # Kortti 2 vain korttien 2 päälle
+        if table.cards and table.cards[-1].get_value() == 15:
+            if played_cards[0].get_value() != 15:
+                print("\nERROR: 2 can only be placed on another 2.")
+                return False
+
+        # Jos mikään ei täyty vuoro vaihtuu
+        status.toggle_turn()
+        return True
+
+    # Tarkistaa onko pelaajalla kelvollisia kortteja
+    @classmethod
+    def has_valid_move(self, table, player):
+        if not table.cards:  # Pöytä on tyhjä, mikä tahansa kortti käy
+            return True
+
+        for card in player.hand:
+            if self.validate_move(table, [card]):
+                return True
+
+        return False
+
+    # Pelaaja nostaa pöydän kortit, jos ei voi tehdä siirtoa
+    @classmethod
+    def handle_no_valid_move(self, table, player):
+        if not self.has_valid_move(table, player):
+            print(f"\n{player.name} cannot play any card and must pick up the pile!")
+            player.hand.extend(table.cards)
+            table.cards = []
+            return True
+        return False
+    
+
+    @classmethod
+    def handle_card_pick(self, deck, player):
+        if deck.cards:
+            amount = 5 - len(player.hand)
+            player.draw(deck, amount)
+
+# Pelitilanne pelin tilanteen arviointia varten
 # Aloittavan pelaajan arvonta
-class StartingPlayerSelector:
+class StartingPlayer:
     @staticmethod
     # Hae pelaajien kädestä pienin kortti: 3->
-    def get_smallest_card_value(player):
-        return min(card.get_value() for card in player.hand)
+    def starting_player(players):
+        smallest_card_value = [(player, min(card.get_value() for card in player.hand)) for player in players]
+        starter = min(smallest_card_value, key=lambda x: x[1])[0]
+        return starter 
 
-    # Tarkastele kummalla on seuraavaksi pienin kortti
-    @staticmethod
-    def determine_starting_player(player1, player2):
-        for value in range(4, 15):
-            player1_has_value = any(card.get_value() == value for card in player1.hand)
-            player2_has_value = any(card.get_value() == value for card in player2.hand)
-            if player1_has_value and not player2_has_value:
-                return player1
-            elif player2_has_value and not player1_has_value:
-                return player2
-        return player1
-
-    @staticmethod
-    # Päätä, kumpi pelaajista aloittaa
-    def decide_starting_turn(player1, player2):
-        player1_smallest = StartingPlayerSelector.get_smallest_card_value(player1)
-        player2_smallest = StartingPlayerSelector.get_smallest_card_value(player2)
-        # Katso, kummalla pelaajista on pienempi kortti
-        if  player1_smallest < player2_smallest:
-            return player1, 1
-        # Jos kumallakin pelaajalla on pienin kortti, katso seuraavaksi pienin
-        elif player1_smallest == player2_smallest:
-            next_player = StartingPlayerSelector.determine_starting_player(player1, player2)
-            return next_player, 1 if next_player == player1 else 2
-        else:
-            return player2, 2
-
+# Hoitaa pelin toiminnallisuuden  
 class GameMenu:
-    def __init__(self, player1, player2, table, deck):
-        self.player1 = player1
-        self.player2 = player2
+    def __init__(self, status, table):
+        self.status = status
         self.table = table
-        self.deck = deck
-        self.turn = None
-        self.card_placed = False
+        self.deck = Deck()
+        self.judge = Judge()  
+        
+    def start_game(self):
+        if not self.status.players:
+            self.setup_game()
+
+        self.status.decide_starting()
+            
+        print("\nStarting the game!")
+        while True:
+            current_player = self.status.get_current_player()
+            action = self.display_turn_menu(current_player)
+            self.handle_action(action, current_player)
+            
+    # Pelin aloitus   
+    def setup_game(self):
+        self.deck = Deck()
+        self.deck.shuffle()
+        self.status.setup_game(self.deck)
 
     def display_turn_menu(self, player):
-        print(f"\n{player.name}'s turn.\nWhat do you want to do next?\n[1] Show my deck\n[2] Place card(s)\n[3] Draw a card\n[4] Show the table\n[5] End turn\n")
+        print(f"\n{player.name}'s turn.\nWhat do you want to do next?\n[1] Show my deck\n[2] Place card(s)\n[3] Draw a card\n[4] Show the table\n")
         return input("Choose: ")
 
     def handle_action(self, action, player):
@@ -238,133 +407,53 @@ class GameMenu:
             # Näytä oma käsi
             if action == '1':
                 player.Show_hand()
+                return 
+            
             # Pelaa kortti(/kortteja)
             elif action == '2':
-                self.place_cards(player)
+                if self.judge.handle_no_valid_move(self.table, player):
+                    # Pelaaja nosti kortit eikä voi jatkaa
+                    self.status.toggle_turn()
+                    return
+                card_indices = input("Enter card indices to play (e.g. '1,2'): ").strip()
+                card_indices = [int(idx) - 1 for idx in card_indices.split(",")]
+                
+                played_cards = [player.hand[idx] for idx in card_indices]
+
+                if self.judge.validate_move(self.table, played_cards):
+                    player.Place_cards(self.table, card_indices)
+                    self.judge.handle_card_pick(self.deck, player)
+                    if not self.judge.update_game_state(self.table, played_cards, self.status, player):
+                        # Jos vuoro ei pysy pelaajalla, vaihda vuoroa
+                        self.status.toggle_turn()
+                else:
+                    print("\nInvalid move. Try again.")
             # Nosta kortti
             elif action == '3':
-                self.draw_cards(player)
+                # Nosto
+                drawn_cards = self.deck.draw_from_deck(1)
+                if drawn_cards:
+                    player.hand.extend(drawn_cards)
+                    print(f"\n{player.name} drew a card.")
+                return
             # Näytä pöydän ylin kortti
             elif action == '4':
                 self.table.Print_card()
-            # Lopeta vuoro
-            elif action == '5':
-                self.toggle_turn(player)
-                self.placed_cards = False
-        # Vikatilanteiden selvittämistä varten
+                return  
         except Exception as e:
             print(f"ERROR: An error has occurred. {e}")
 
-    def place_cards(self, player):
-        card_input = input("Input the card numbers you want to place (e.g. '2,3' or '1')\nCards: ")
-        
-        try:
-            card_indices = [int(x.strip()) -1 for x in card_input.split(",")]
-            
-            # Onko oikeat indexit annettu
-            if all(0 <= index < len(player.hand) for index in card_indices):
-                card_values = [player.hand[index].get_value() for index in card_indices]
-
-                # onko korttien arvot samat     
-                if len(set(card_values)) == 1:
-
-                    # Laitettavian korttien ja pöydän korttien vertailu
-                    if not self.table.cards or card_values[0] >= self.table.latest_card_value():
-                        player.Place_cards(self.table, [index for index in card_indices])
-                        self.card_placed = True
-   
-                        for index in card_indices:
-                            card = player.hand[index]
-                    else:
-                        print("\nERROR: Selected cards must be higher or equal to the card on the table.\n")
-    
-
-                else:
-                    print("\nERROR: All selected cards must have the same value.\n")
-            else:
-                print("\nERROR: Invalid card index(es) provided.\n")
-        except ValueError:
-            print("\nERROR: Wrong format. Input only number(s) separated by a comma. (e.g. 4,9,1)\n")
-
-    def draw_cards(self, player):
-
-        if self.deck.cards:
-            while len(player.hand) < 5 and self.deck.cards:
-                player.draw(self.deck, 1)
-            print(f"{player.name} drew cards from deck")
-        else:
-            print(f"{player.name} Drawing the entire table!")
-            self.handle_no_placement(player)
-
-    def check_no_placement(self, player):
-        """Check if the player can place at least one card."""
-        if self.card_placed:
-            return False # Player has least one card placed
-        elif not self.table.cards:
-            return False  # If the table is empty, any card can be placed.
-
-        top_card_value = self.table.cards[-1].get_value()
-        for card in player.hand:
-            if card.get_value() >= top_card_value:
-                return False  # Player has at least one valid card to place.
-        return True  # No valid card to place.
-
-    def handle_no_placement(self, player):
-        """If the player cannot place any cards, they draw the table."""
-        print(f"{player.name} cannot place any cards and will draw the table!")
-        player.hand.extend(self.table.cards)
-        self.table.cards = []  # Clear the table after drawing.
-    
-    def toggle_turn(self, player):
-        if self.check_no_placement(player):
-            self.handle_no_placement(player)
-        self.turn = 2 if self.turn == 1 else 1
-        self.card_placed = False
-        print(self.card_placed)
-
-    def start_game(self):
-        starter, turn = StartingPlayerSelector.decide_starting_turn(self.player1, self.player2)
-        #print(f"Player {starter.name} has the smallest card and will go first.")
-        self.turn = turn
-
-        while True:
-            current_player = self.player1 if self.turn == 1 else self.player2
-            
-            action = self.display_turn_menu(current_player)
-            self.handle_action(action, current_player)
 
 
 # Ohjelma alkaa
 def main():
-    deck = Deck()
     table = Table()
+    status = Status()
 
-    # Sekoita kortit
-    deck.shuffle()
-    # Näytä koko pakka
-    #deck.print_deck() 
 
-    # Pelaajien luonnin automatisointi testaamisen nopeuttamiseksi
-    player1 = Player("Sini")
-    player2 = Player("Lassi")
 
-    player1.draw(deck,5)
-    player2.draw(deck,5)
-
-    player1.Show_hand()
-    player2.Show_hand()
-    #player.draw(deck,5)
-    #player.Show_hand()
-    #player.Place_cards(table,[2,4])
-    table.Print_table()
-
-    # Arvotaan kumpi pelaajista aloittaa
-    starting_player, turn = StartingPlayerSelector.decide_starting_turn(player1, player2)
-    print(f"Player {starting_player.name} has the smallest card and will go first.")
-
-    game_menu = GameMenu(player1, player2, table, deck)
-    game_menu.turn = turn
+    # Aloittaa pelin
+    game_menu = GameMenu(status, table)
     game_menu.start_game()
-
 
 main()

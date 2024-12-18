@@ -5,7 +5,10 @@ import time
 SUITS = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
 
+# Aseta testiajo tästä
+TEST_MODE = False
 
+#Kortti luokka
 class Card:
 
     def __init__(self, suit, rank):
@@ -126,9 +129,10 @@ class Deck:
     
 # Poistopakka
 class DeletedCards(Deck):
-
     def __init__(self):
         super().__init__()
+        self.cards = []
+
 
 # Pelattava pöytä
 class Table():
@@ -140,6 +144,11 @@ class Table():
         print(f'\nCards on table:')
         for idx, card in enumerate(self.cards):
             print(f'{idx +1}: [{card.__str__()}]')
+
+    # Ottaa vastaan pelaajan laittamat kortit
+    def take_cards(self, input_cards):
+        self.cards.extend(input_cards)
+
 
 # Tulostaa viimeisimmän kortin pöydällä
     def Print_latest_card(self):
@@ -153,6 +162,7 @@ class Table():
         else:
             print("No cards on the table.\n")
     
+# Palauttaa viimeisimmän kortin arvo
     def latest_card_value(self):
         if self.cards:
             return self.cards[-1].get_value()
@@ -198,7 +208,8 @@ class Player(metaclass=ABCMeta):
                 selected_cards.append(self.hand.pop(index))
             else:
                 print(f"\nInvalid index: {index + 1}")
-        table.cards.extend(selected_cards)
+        table.take_cards(selected_cards)
+
 
 # Teksi- ja AI pelaajaluokat
 class TextPlayer(Player):
@@ -228,8 +239,9 @@ class Status:
         self.current_turn = self.players.index(starter)
 
     # Asetetaan pelin asetukset (Pelaajien lukumäärä, ja pelaajien nimet.)
-    def setup_game(self, deck):  
-        # Ohittaa pelin asetuksien asettelun
+    def setup_game(self, deck):
+
+        # Ohittaa pelin asetuksien asettelun (Testiajo)
         if self.test_mode:
             print("Test mode activated. Deactivate flag in Status.setup_game().")
             self.players.append(TextPlayer("Sini"))
@@ -237,7 +249,7 @@ class Status:
             self.players.append(TextPlayer("Toni"))
             for player in self.players:
                 player.draw(deck, 5)
-            # deck.cards.clear()
+            deck.cards = deck.cards[:10]
             return
         
         # Pelin asetuksien asettelu
@@ -257,6 +269,7 @@ class Status:
             player.draw(deck, 5)
             self.players.append(player)
         print("\nPlayers are ready")
+
 
     # Aihio korttien pelaamista varten
     def place_cards(self, player):
@@ -280,7 +293,8 @@ class Status:
                 print("\nERROR: Invalid card index(es) provided.\n")
         except ValueError:
             print("\nERROR: Wrong format. Input only number(s) separated by a comma. (e.g. 4,9,1)\n")
-            
+    
+    # Palauttaa vuorossa olevan pelaajan
     def get_current_player(self):
         return self.players[self.current_turn]
     
@@ -288,6 +302,7 @@ class Status:
     def toggle_turn(self):
         self.current_turn = (self.current_turn + 1) %len(self.players)
 
+# Judge luokka määrittää pelin säännöt
 class Judge:
     
     # Tarkistaa onko pelaajan siirto sääntöjen mukainen
@@ -317,6 +332,7 @@ class Judge:
                     if played_value == 14 and 15 > last_value >= 11:
                         return True
                     return False
+            # Ettei laitettava kortti ole pienempi
                 case _:
                     if played_value >= last_value:
                         return True
@@ -328,6 +344,7 @@ class Judge:
     def update_game_state(self, table, deletedCards, played_cards, status, player):
         
         match played_cards[0].get_value():
+
             # Kortti 10 kaataa pakan
             case 10:
                 print("\nThe pile collapses due to a 10! The current player keeps the turn.")
@@ -360,6 +377,7 @@ class Judge:
         if not table.cards:  # Pöytä on tyhjä, mikä tahansa kortti käy
             return True
 
+        # tarkistaa jokaisen kortin yksitellen
         for card in player.hand:
             if self.validate_move(table, [card]):
                 return True
@@ -377,18 +395,17 @@ class Judge:
             return True
         return False
     
-
+    # Nostaa automaattisesti pelaajalle kortteja vuoron jälkeen
     @classmethod
     def handle_card_pick(self, deck, player):
-        deck_empy = False
-        if not deck_empy and len(player.hand) < 5:
+        if deck.cards and len(player.hand) < 5:
             amount = 5 - len(player.hand)
             player.draw(deck, amount)
             print(f"\ncards left in deck: {len(deck.cards)}")
             if not deck.cards:
                 print("\nDeck is empy. All cards are distributed")
                 time.sleep(2)
-                deck_empy = True
+        return
             
 
 # Pelitilanne pelin tilanteen arviointia varten
@@ -423,6 +440,8 @@ class GameMenu:
             print(f"\n{player.name} finished at {self.place}. place")
             self.place +=1
         self.status.players.remove(player)
+        self.status.toggle_turn()
+
         if len(self.status.players) == 1:
             print(f"Game over!\n{self.status.players[0].name} on paskahousu")
             exit()
@@ -500,10 +519,11 @@ class GameMenu:
 def main():
 
     table = Table()
-    status = Status(test_mode=True)
+    status = Status(test_mode=False)
     deleted_cards = DeletedCards()
     
     # Aloittaa pelin
     game_menu = GameMenu(status, table, deleted_cards)
     game_menu.start_game()
+    
 main()
